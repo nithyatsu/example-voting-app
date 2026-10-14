@@ -20,7 +20,6 @@ Why it is shaped this way:
 - **Postgres is a Radius resource.** The platform decides what it is: in-cluster Postgres on Kubernetes, Azure Flexible Server on ACI. The app reads `POSTGRES_*` env vars, and `POSTGRES_SSLMODE=prefer` makes the same image work with TLS (Azure) and plaintext (in-cluster).
 - **`platformOptions.sku`** selects `Confidential` or `Standard` ACI. The Kubernetes recipe ignores it.
 - **Images are prebuilt and public** in GHCR, built by [`.github/workflows/publish-images.yaml`](.github/workflows/publish-images.yaml). ACI recipes don't support `containerImages` or registry credentials.
-- **No ACA.** There is no Azure Container Apps recipe yet; see [radius#13015](https://github.com/radius-project/radius/issues/13015).
 
 ## 0. Prerequisites (once)
 
