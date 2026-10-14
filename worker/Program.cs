@@ -16,8 +16,8 @@ namespace Worker
         {
             try
             {
-                var pgsql = OpenDbConnection("Server=db;Username=postgres;Password=postgres;");
-                var redisConn = OpenRedisConnection("redis");
+                var pgsql = OpenDbConnection(BuildDbConnectionString());
+                var redisConn = OpenRedisConnection(Env("REDIS_HOST", "redis"), Env("REDIS_PORT", "6379"));
                 var redis = redisConn.GetDatabase();
 
                 // Keep alive is not implemented in Npgsql yet. This workaround was recommended:
@@ -34,7 +34,7 @@ namespace Worker
                     // Reconnect redis if down
                     if (redisConn == null || !redisConn.IsConnected) {
                         Console.WriteLine("Reconnecting Redis");
-                        redisConn = OpenRedisConnection("redis");
+                        redisConn = OpenRedisConnection(Env("REDIS_HOST", "redis"), Env("REDIS_PORT", "6379"));
                         redis = redisConn.GetDatabase();
                     }
                     string json = redis.ListLeftPopAsync("votes").Result;
@@ -46,7 +46,7 @@ namespace Worker
                         if (!pgsql.State.Equals(System.Data.ConnectionState.Open))
                         {
                             Console.WriteLine("Reconnecting DB");
-                            pgsql = OpenDbConnection("Server=db;Username=postgres;Password=postgres;");
+                            pgsql = OpenDbConnection(BuildDbConnectionString());
                         }
                         else
                         { // Normal +1 vote requested
@@ -102,7 +102,28 @@ namespace Worker
             return connection;
         }
 
-        private static ConnectionMultiplexer OpenRedisConnection(string hostname)
+        private static string Env(string name, string fallback)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            return string.IsNullOrEmpty(value) ? fallback : value;
+        }
+
+        private static string BuildDbConnectionString()
+        {
+            var builder = new NpgsqlConnectionStringBuilder
+            {
+                Host = Env("POSTGRES_HOST", "db"),
+                Port = int.Parse(Env("POSTGRES_PORT", "5432")),
+                Username = Env("POSTGRES_USER", "postgres"),
+                Password = Env("POSTGRES_PASSWORD", "postgres"),
+                Database = Env("POSTGRES_DB", "postgres"),
+                SslMode = Enum.Parse<SslMode>(Env("POSTGRES_SSLMODE", "Disable"), true),
+                TrustServerCertificate = true
+            };
+            return builder.ConnectionString;
+        }
+
+        private static ConnectionMultiplexer OpenRedisConnection(string hostname, string port)
         {
             // Use IP address to workaround https://github.com/StackExchange/StackExchange.Redis/issues/410
             var ipAddress = GetIp(hostname);
@@ -113,7 +134,7 @@ namespace Worker
                 try
                 {
                     Console.Error.WriteLine("Connecting to redis");
-                    return ConnectionMultiplexer.Connect(ipAddress);
+                    return ConnectionMultiplexer.Connect($"{ipAddress}:{port}");
                 }
                 catch (RedisConnectionException)
                 {

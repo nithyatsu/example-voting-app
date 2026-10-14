@@ -17,15 +17,30 @@ io.on('connection', function (socket) {
   });
 });
 
-var pool = new Pool({
-  connectionString: 'postgres://postgres:postgres@db/postgres'
-});
+var sslMode = (process.env.POSTGRES_SSLMODE || 'disable').toLowerCase();
+
+function createPool(useSsl) {
+  return new Pool({
+    host: process.env.POSTGRES_HOST || 'db',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    user: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || 'postgres',
+    database: process.env.POSTGRES_DB || 'postgres',
+    ssl: useSsl ? { rejectUnauthorized: false } : false
+  });
+}
+
+var pool = createPool(sslMode !== 'disable');
 
 async.retry(
   {times: 1000, interval: 1000},
   function(callback) {
     pool.connect(function(err, client, done) {
       if (err) {
+        if (sslMode === 'prefer' && /does not support SSL/i.test(err.message)) {
+          console.log("Server does not support SSL, retrying without it");
+          pool = createPool(false);
+        }
         console.error("Waiting for db");
       }
       callback(err, client);
